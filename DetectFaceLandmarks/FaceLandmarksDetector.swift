@@ -9,13 +9,48 @@
 import UIKit
 import Vision
 
+extension CIWarpKernel {
+  static var warp: CIWarpKernel {
+    let url = Bundle.main.url(forResource: "default", withExtension: "metallib")!
+    let data = try! Data(contentsOf: url)
+    return try! CIWarpKernel(functionName: "warp", fromMetalLibraryData: data)
+  }
+}
+
+class FaceShrinkFilter: CIFilter {
+  private var inputImage: CIImage? = nil
+  private let kernel: CIWarpKernel
+  var a0: CGFloat = 0
+  var a1: CGFloat = 0
+  
+  override init() {
+    kernel = .warp
+    super.init()
+  }
+  
+  required init?(coder: NSCoder) {
+    fatalError("init(coder:) has not been implemented")
+  }
+  
+  override var outputImage: CIImage? {
+    guard let inputImage = inputImage else { return nil }
+    return kernel.apply(extent: inputImage.extent, roiCallback: { _, r in r }, image: inputImage, arguments: [a0, a1])
+  }
+  
+  override func setValue(_ value: Any?, forKey key: String) {
+    if key == kCIInputImageKey {
+      inputImage = value as? CIImage
+    }
+  }
+}
+
 let previewImageView: UIImageView = .init()
 
 class FaceLandmarksDetector {
   let sequenceRequestHandler = VNSequenceRequestHandler()
   
-  open func processFaces2(for pixelBuffer: CVPixelBuffer, complete: @escaping (CIImage?) -> Void) {
-    let inputImage = CIImage(cvPixelBuffer: pixelBuffer)
+  open func processFaces2(for pixelBuffer: CVPixelBuffer, scale: CGFloat, complete: @escaping (CIImage?) -> Void) {
+    let inputImage = CIImage(cvPixelBuffer: pixelBuffer).transformed(by: .init(scaleX: scale, y: scale))
     let request = VNDetectFaceLandmarksRequest { (request, error) in
       if error == nil {
         if let results = request.results as? [VNFaceObservation] {
@@ -127,10 +162,7 @@ class FaceLandmarksDetector {
       correctionFilter.setValue(CIVector(x: edgeD.x, y: edgeD.y), forKey: "inputBottomRight")
       correctionFilter.setValue(CIVector(x: edgeC.x, y: edgeC.y), forKey: "inputBottomLeft")
       
-      // 処理
-      let sepiaInputImage = correctionFilter.outputImage!
-      let sepiaFilter = CIFilter(name: "CISepiaTone")!
-      sepiaFilter.setValue(sepiaInputImage, forKey: kCIInputImageKey)
+      // 処理 //
     
       //顔の傾き
       let faceRad = getRadian(a: center, b: midBottom)
@@ -138,7 +170,7 @@ class FaceLandmarksDetector {
       //右目
       let rightEyeFilter: CIFilter
       rightEye: do {
-        let eyeDistortInput = sepiaFilter.outputImage!
+        let eyeDistortInput = correctionFilter.outputImage!
         let cropedSize = eyeDistortInput.extent
         rightEyeFilter = CIFilter(name: "CIBumpDistortion")!
         rightEyeFilter.setValue(eyeDistortInput, forKey: kCIInputImageKey)
@@ -149,8 +181,8 @@ class FaceLandmarksDetector {
                           y: rotatedPupil.y - center.y + cropedSize.height / 2)
           rightEyeFilter.setValue(CIVector(x: p.x, y: p.y), forKey: kCIInputCenterKey)
         }
-        rightEyeFilter.setValue(50, forKey: kCIInputRadiusKey)
-        rightEyeFilter.setValue(1.2, forKey: kCIInputScaleKey)
+        rightEyeFilter.setValue(25, forKey: kCIInputRadiusKey)
+        rightEyeFilter.setValue(0.5, forKey: kCIInputScaleKey)
       }
       
       //左目
@@ -167,13 +199,52 @@ class FaceLandmarksDetector {
                           y: rotatedPupil.y - center.y + cropedSize.height / 2)
           leftEyeFilter.setValue(CIVector(x: p.x, y: p.y), forKey: kCIInputCenterKey)
         }
-        leftEyeFilter.setValue(50, forKey: kCIInputRadiusKey)
-        leftEyeFilter.setValue(1.2, forKey: kCIInputScaleKey)
+        leftEyeFilter.setValue(25, forKey: kCIInputRadiusKey)
+        leftEyeFilter.setValue(0.5, forKey: kCIInputScaleKey)
+      }
+      
+      //補足する
+      let shrinkFilter: CIFilter
+      shrink: do {
+        // １次関数でフィッティング
+        // http://hooktail.sub.jp/computPhys/least-square/
+        func fitting(points: [CIVector]) -> (a0: CGFloat, a1: CGFloat) {
+          
+          var A00: CGFloat = 0
+          var A01: CGFloat = 0
+          var A02: CGFloat = 0
+          var A11: CGFloat = 0
+          var A12: CGFloat = 0
+          
+          for point in points {
+            A00 += 1.0
+            A01 += point.x
+            A02 += point.y;
+            A11 += point.x * point.x
+            A12 += point.x * point.y
+          }
+          return (a0: (A02*A11-A01*A12) / (A00*A11-A01*A01),
+                  a1: (A00*A12-A01*A02) / (A00*A11-A01*A01))
+        }
+        let inputImage = leftEyeFilter.outputImage!
+        let cropedSize = inputImage.extent.size
+        let faceContour = faceLandmarks.faceContour!.pointsInImage(imageSize: size)
+        let (a0, a1) = fitting(points: faceContour[0...5].map({ (point) -> CGPoint in
+          let rotated = rotate(a: center, p: point, θ: -faceRad)
+          let p = CGPoint(x: rotated.x - center.x + cropedSize.width / 2,
+                          y: rotated.y - center.y + cropedSize.height / 2)
+          return p
+        }).map({ CIVector(x: $0.x, y: $0.y) }))
+        let filter = FaceShrinkFilter()
+        filter.a0 = a0
+        filter.a1 = a1
+        filter.setValue(inputImage, forKey: kCIInputImageKey)
+        shrinkFilter = filter
       }
       
       // 合成
       let transformFilter = CIFilter(name: "CIPerspectiveTransform")!
-      let transformInputImage = leftEyeFilter.outputImage!
+      let transformInputImage = shrinkFilter.outputImage!
       transformFilter.setValue(transformInputImage, forKey: kCIInputImageKey)
       transformFilter.setValue(CIVector(x: edgeB.x, y: edgeB.y), forKey: "inputTopLeft")
       transformFilter.setValue(CIVector(x: edgeA.x, y: edgeA.y), forKey: "inputTopRight")

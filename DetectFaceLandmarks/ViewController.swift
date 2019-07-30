@@ -71,6 +71,14 @@ class ViewController: UIViewController {
     // Dispose of any resources that can be recreated.
   }
   let ciContext = CIContext(mtlDevice: MTLCreateSystemDefaultDevice()!)
+  var isEnabled: Bool = true
+  override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+    isEnabled = false
+  }
+  
+  override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+    isEnabled = true
+  }
 }
 
 extension ViewController: AVCaptureVideoDataOutputSampleBufferDelegate {
@@ -78,16 +86,22 @@ extension ViewController: AVCaptureVideoDataOutputSampleBufferDelegate {
   
   func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
     
-    // Scale image to process it faster
-    let maxSize = CGSize(width: 1024, height: 1024)
+    let scale: CGFloat = 0.5
     let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer)!
-    faceDetector.processFaces2(for: pixelBuffer) { (image) in
+    let width = CVPixelBufferGetWidth(pixelBuffer)
+    let height = CVPixelBufferGetHeight(pixelBuffer)
+    
+    if !isEnabled {
+      DispatchQueue.main.async {
+        self.imageView.image = UIImage(ciImage: CIImage(cvPixelBuffer: pixelBuffer).oriented(.leftMirrored))
+      }
+      return
+    }
+    
+    faceDetector.processFaces2(for: pixelBuffer, scale: scale) { (image) in
       DispatchQueue.main.async {
         guard let image = image else { return }
-//        debugPrint(image.extent)
-//        let cgImg = self.ciContext.createCGImage(image, from: .init(origin: .zero, size: image.extent.size))
-//        let uiImage = UIImage(cgImage: cgImg!)
-        self.imageView.image = UIImage(ciImage: image.cropped(to: .init(origin: .zero, size: .init(width: 1920, height: 1080))))//.oriented(.leftMirrored))
+        self.imageView.image = UIImage(ciImage: image.cropped(to: .init(origin: .zero, size: .init(width: CGFloat(width) * scale, height: CGFloat(height) * scale))).oriented(.leftMirrored))
       }
     }
 //    if let image = UIImage(sampleBuffer: sampleBuffer)?.flipped()?.imageWithAspectFit(size: maxSize) {
