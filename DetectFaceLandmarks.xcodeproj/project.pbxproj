@@ -16,6 +16,7 @@
 		4EDCF95A1EFAA5E300571ED9 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 4EDCF9581EFAA5E300571ED9 /* LaunchScreen.storyboard */; };
 		4EDCF9651EFAA5E300571ED9 /* DetectFaceLandmarksTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EDCF9641EFAA5E300571ED9 /* DetectFaceLandmarksTests.swift */; };
 		4EDCF9701EFAA5E300571ED9 /* DetectFaceLandmarksUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EDCF96F1EFAA5E300571ED9 /* DetectFaceLandmarksUITests.swift */; };
+		CD65E65122F0454D00D56105 /* kernel.metal in Sources */ = {isa = PBXBuildFile; fileRef = CD65E65022F0454D00D56105 /* kernel.metal */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -51,6 +52,7 @@
 		4EDCF96B1EFAA5E300571ED9 /* DetectFaceLandmarksUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DetectFaceLandmarksUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		4EDCF96F1EFAA5E300571ED9 /* DetectFaceLandmarksUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DetectFaceLandmarksUITests.swift; sourceTree = "<group>"; };
 		4EDCF9711EFAA5E300571ED9 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		CD65E65022F0454D00D56105 /* kernel.metal */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.metal; name = kernel.metal; path = ../../../../../../../System/Volumes/Data/Users/beta/Workspace/github.com/noppefoxwolf/FaceLandmarksDetection/DetectFaceLandmarks/kernel.metal; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -109,6 +111,7 @@
 				4EDCF9561EFAA5E300571ED9 /* Assets.xcassets */,
 				4EDCF9581EFAA5E300571ED9 /* LaunchScreen.storyboard */,
 				4EDCF95B1EFAA5E300571ED9 /* Info.plist */,
+				CD65E65022F0454D00D56105 /* kernel.metal */,
 			);
 			path = DetectFaceLandmarks;
 			sourceTree = "<group>";
@@ -266,6 +269,7 @@
 				4E871D991F129B7D00062C1C /* FaceLandmarksDetector.swift in Sources */,
 				4E40775D1F129F1F00D570AB /* UIImage+Scale.swift in Sources */,
 				4EDCF9501EFAA5E300571ED9 /* AppDelegate.swift in Sources */,
+				CD65E65122F0454D00D56105 /* kernel.metal in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -434,6 +438,8 @@
 				DEVELOPMENT_TEAM = FBQ6Z8AF3U;
 				INFOPLIST_FILE = DetectFaceLandmarks/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				MTLLINKER_FLAGS = "-cikernel";
+				MTL_COMPILER_FLAGS = "-fcikernel";
 				PRODUCT_BUNDLE_IDENTIFIER = com.mathieubolard.DetectFaceLandmarks;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 4.0;
@@ -448,6 +454,8 @@
 				DEVELOPMENT_TEAM = FBQ6Z8AF3U;
 				INFOPLIST_FILE = DetectFaceLandmarks/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				MTLLINKER_FLAGS = "-cikernel";
+				MTL_COMPILER_FLAGS = "-fcikernel";
 				PRODUCT_BUNDLE_IDENTIFIER = com.mathieubolard.DetectFaceLandmarks;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_VERSION = 4.0;

@@ -22,6 +22,15 @@ class ViewController: UIViewController {
     
     // Do any additional setup after loading the view, typically from a nib.
     configureDevice()
+    
+    previewImageView.translatesAutoresizingMaskIntoConstraints = false
+    view.addSubview(previewImageView)
+    NSLayoutConstraint.activate([
+      previewImageView.topAnchor.constraint(equalTo: view.topAnchor),
+      previewImageView.leftAnchor.constraint(equalTo: view.leftAnchor),
+      previewImageView.widthAnchor.constraint(equalToConstant: 200),
+      previewImageView.heightAnchor.constraint(equalToConstant: 200),
+    ])
   }
   
   private func getDevice() -> AVCaptureDevice? {
@@ -70,14 +79,19 @@ extension ViewController: AVCaptureVideoDataOutputSampleBufferDelegate {
     
     // Scale image to process it faster
     let maxSize = CGSize(width: 1024, height: 1024)
-    
-    if let image = UIImage(sampleBuffer: sampleBuffer)?.flipped()?.imageWithAspectFit(size: maxSize) {
-      faceDetector.highlightFaces(for: image) { (resultImage) in
-        DispatchQueue.main.async {
-          self.imageView?.image = resultImage
-        }
+    let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer)!
+    faceDetector.processFaces(for: pixelBuffer) { (image) in
+      DispatchQueue.main.async {
+        self.imageView.image = UIImage(ciImage: image!)
       }
     }
+//    if let image = UIImage(sampleBuffer: sampleBuffer)?.flipped()?.imageWithAspectFit(size: maxSize) {
+//      faceDetector.highlightFaces(for: image) { (resultImage) in
+//        DispatchQueue.main.async {
+//          self.imageView?.image = resultImage
+//        }
+//      }
+//    }
   }
 }
 

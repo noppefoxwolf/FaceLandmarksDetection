@@ -9,7 +9,31 @@
 import UIKit
 import Vision
 
+let previewImageView: UIImageView = .init()
+
 class FaceLandmarksDetector {
+  let sequenceRequestHandler = VNSequenceRequestHandler()
+  
+  open func processFaces(for pixelBuffer: CVPixelBuffer, complete: @escaping (CIImage?) -> Void) {
+    let pixelBuffer = pixelBuffer
+    let detectFaceRequest = VNDetectFaceLandmarksRequest { (request, error) in
+      if error == nil {
+        if let results = request.results as? [VNFaceObservation] {
+          if let landmarks = results.first?.landmarks {
+            complete(self.process(pixelBuffer: pixelBuffer, faceLandmarks: landmarks)!)
+          } else {
+            complete(CIImage(cvPixelBuffer: pixelBuffer).oriented(.leftMirrored))
+          }
+        }
+      } else {
+        complete(CIImage(cvPixelBuffer: pixelBuffer).oriented(.leftMirrored))
+        print(error!.localizedDescription)
+      }
+    }
+    let vnImage = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, options: [:])
+    try? vnImage.perform([detectFaceRequest])
+  //    try? sequenceRequestHandler.perform([detectFaceRequest], on: cgImage)f
+  }
   
   open func highlightFaces(for source: UIImage, complete: @escaping (UIImage) -> Void) {
     var resultImage = source
@@ -31,12 +55,78 @@ class FaceLandmarksDetector {
       complete(resultImage)
     }
     
-    let vnImage = VNImageRequestHandler(cgImage: source.cgImage!, options: [:])
+    let cgImage = source.cgImage!
+    let vnImage = VNImageRequestHandler(cgImage: cgImage, options: [:])
     try? vnImage.perform([detectFaceRequest])
+//    try? sequenceRequestHandler.perform([detectFaceRequest], on: cgImage)f
+  }
+  
+  private func process(pixelBuffer: CVPixelBuffer, faceLandmarks: VNFaceLandmarks2D) -> CIImage? {
+    if let noseCrest = faceLandmarks.noseCrest, let faceContour = faceLandmarks.faceContour {
+      let width = CVPixelBufferGetWidth(pixelBuffer)
+      let height = CVPixelBufferGetHeight(pixelBuffer)
+      let size = CGSize(width: width, height: height)
+      let midBottom = faceContour.pointsInImage(imageSize: size)[faceContour.pointCount / 2]
+      let center = noseCrest.pointsInImage(imageSize: size).last!
+      
+      // 点P(x, y)を点A(a, b)の周りに角θだけ回転した点をQ(x”, y”)とすると
+      // x' = (x - a) * cos(θ) - (y - b) * sin(θ) + a
+      // y' = (x - a) * sin(θ) + (y - b) * cos(θ) + b
+      func rotate(a: CGPoint, p: CGPoint, θ: CGFloat) -> CGPoint {
+        return .init(
+          x: (p.x - a.x) * cos(θ) - (p.y - a.y) * sin(θ) + a.x,
+          y: (p.x - a.x) * sin(θ) + (p.y - a.y) * cos(θ) + a.y
+        )
+      }
+      
+      //https://manapedia.jp/text/636
+      //点Ａ（ｘ1,ｙ1）と点Ｂ（ｘ2,ｙ2）をｍ：ｎに外分する点Ｑ（ｘ,ｙ）
+      func externallyDivide(a: CGPoint, b: CGPoint, m: CGFloat, n: CGFloat) -> CGPoint {
+        return .init(
+          x: (-(n * a.x) + (m * b.x)) / (m - n),
+          y: (-(n * a.y) + (m * b.y)) / (m - n)
+        )
+      }
+      
+      let extJow = externallyDivide(a: center, b: midBottom, m: 1, n: 0.5)
+      debugPrint(midBottom, extJow)
+      
+      let edgeA = rotate(a: center, p: extJow, θ: .pi / 2 * 1 - (.pi / 4))
+      let edgeB = rotate(a: center, p: extJow, θ: .pi / 2 * 2 - (.pi / 4))
+      let edgeC = rotate(a: center, p: extJow, θ: .pi / 2 * 3 - (.pi / 4))
+      let edgeD = rotate(a: center, p: extJow, θ: .pi / 2 * 4 - (.pi / 4))
+      
+      // 抜き取り
+      let inputImage = CIImage(cvPixelBuffer: pixelBuffer)
+      let correctionFilter = CIFilter(name: "CIPerspectiveCorrection")!
+      correctionFilter.setValue(inputImage, forKey: kCIInputImageKey)
+      correctionFilter.setValue(CIVector(x: edgeB.x, y: edgeB.y), forKey: "inputTopLeft")
+      correctionFilter.setValue(CIVector(x: edgeC.x, y: edgeC.y), forKey: "inputTopRight")
+      correctionFilter.setValue(CIVector(x: edgeD.x, y: edgeD.y), forKey: "inputBottomRight")
+      correctionFilter.setValue(CIVector(x: edgeA.x, y: edgeA.y), forKey: "inputBottomLeft")
+      
+      // 処理
+      let sepiaFilter = CIFilter(name: "CISepiaTone")!
+      sepiaFilter.setValue(correctionFilter.outputImage!, forKey: kCIInputImageKey)
+      
+      // 合成
+      let transformFilter = CIFilter(name: "CIPerspectiveTransform")!
+      let transformInputImage = sepiaFilter.outputImage!
+      transformFilter.setValue(transformInputImage, forKey: kCIInputImageKey)
+      transformFilter.setValue(CIVector(x: edgeB.x, y: edgeB.y), forKey: "inputTopLeft")
+      transformFilter.setValue(CIVector(x: edgeC.x, y: edgeC.y), forKey: "inputTopRight")
+      transformFilter.setValue(CIVector(x: edgeD.x, y: edgeD.y), forKey: "inputBottomRight")
+      transformFilter.setValue(CIVector(x: edgeA.x, y: edgeA.y), forKey: "inputBottomLeft")
+      
+      let result = transformFilter.outputImage?.composited(over: inputImage).oriented(.leftMirrored)
+      return result
+    }
+    return CIImage(cvPixelBuffer: pixelBuffer)
   }
   
   private func drawOnImage(source: UIImage, boundingRect: CGRect, faceLandmarks: VNFaceLandmarks2D) -> UIImage {
     UIGraphicsBeginImageContextWithOptions(source.size, false, 1)
+    
     let context = UIGraphicsGetCurrentContext()!
     context.translateBy(x: 0.0, y: source.size.height)
     context.scaleBy(x: 1.0, y: -1.0)
@@ -56,10 +146,7 @@ class FaceLandmarksDetector {
     if let noseCrest = faceLandmarks.noseCrest, let faceContour = faceLandmarks.faceContour {
       let midBottom = faceContour.pointsInImage(imageSize: source.size)[faceContour.pointCount / 2]
       let center = noseCrest.pointsInImage(imageSize: source.size).last!
-      context.setStrokeColor(UIColor.white.cgColor)
-      context.setLineWidth(2.0)
-      context.addLines(between: [center, midBottom])
-      context.strokePath()
+      
       // 点P(x, y)を点A(a, b)の周りに角θだけ回転した点をQ(x”, y”)とすると
       // x' = (x - a) * cos(θ) - (y - b) * sin(θ) + a
       // y' = (x - a) * sin(θ) + (y - b) * cos(θ) + b
@@ -71,15 +158,39 @@ class FaceLandmarksDetector {
         )
       }
       
-      let edgeA = rotate(a: center, p: midBottom, θ: .pi / 2 * 1 - (.pi / 4))
-      let edgeB = rotate(a: center, p: midBottom, θ: .pi / 2 * 2 - (.pi / 4))
-      let edgeC = rotate(a: center, p: midBottom, θ: .pi / 2 * 3 - (.pi / 4))
-      let edgeD = rotate(a: center, p: midBottom, θ: .pi / 2 * 4 - (.pi / 4))
+      func externallyDivide(a: CGPoint, b: CGPoint, m: CGFloat, n: CGFloat) -> CGPoint {
+        return .init(
+          x: (-(n * a.x) + (m * b.x)) / (m - n),
+          y: (-(n * a.y) + (m * b.y)) / (m - n)
+        )
+      }
+      let extJow = externallyDivide(a: center, b: midBottom, m: 1, n: 0.5)
+      
+      context.setStrokeColor(UIColor.white.cgColor)
+      context.setLineWidth(2.0)
+      context.addLines(between: [center, extJow])
+      context.strokePath()
+      
+      let edgeA = rotate(a: center, p: extJow, θ: .pi / 2 * 1 - (.pi / 4))
+      let edgeB = rotate(a: center, p: extJow, θ: .pi / 2 * 2 - (.pi / 4))
+      let edgeC = rotate(a: center, p: extJow, θ: .pi / 2 * 3 - (.pi / 4))
+      let edgeD = rotate(a: center, p: extJow, θ: .pi / 2 * 4 - (.pi / 4))
       
       context.setStrokeColor(UIColor.white.cgColor)
       context.setLineWidth(2.0)
       context.addLines(between: [edgeA, edgeB, edgeC, edgeD, edgeA])
       context.strokePath()
+      
+      let filter = CIFilter(name: "CIPerspectiveCorrection")!
+      filter.setValue(CIImage(image: source), forKey: kCIInputImageKey)
+      filter.setValue(CIVector(x: edgeB.x, y: edgeB.y), forKey: "inputTopLeft")
+      filter.setValue(CIVector(x: edgeC.x, y: edgeC.y), forKey: "inputTopRight")
+      filter.setValue(CIVector(x: edgeD.x, y: edgeD.y), forKey: "inputBottomRight")
+      filter.setValue(CIVector(x: edgeA.x, y: edgeA.y), forKey: "inputBottomLeft")
+      
+      DispatchQueue.main.async {
+        previewImageView.image = UIImage(ciImage: filter.outputImage!)
+      }
       
 //      //centerがmidBottomよりも右上にある前提
 //      let p0: CGPoint = .zero
@@ -177,10 +288,12 @@ class FaceLandmarksDetector {
       drawFeature(rightEyebrow, color: UIColor.blue.cgColor)
     }
     
+    
     let coloredImg : UIImage = UIGraphicsGetImageFromCurrentImageContext()!
     UIGraphicsEndImageContext()
     return coloredImg
   }
   
 }
+
 
