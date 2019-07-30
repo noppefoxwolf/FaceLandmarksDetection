@@ -19,7 +19,7 @@ class ViewController: UIViewController {
   
   override func viewDidLoad() {
     super.viewDidLoad()
-    
+    imageView.contentMode = .scaleAspectFit
     // Do any additional setup after loading the view, typically from a nib.
     configureDevice()
     
@@ -70,19 +70,24 @@ class ViewController: UIViewController {
     super.didReceiveMemoryWarning()
     // Dispose of any resources that can be recreated.
   }
-  
+  let ciContext = CIContext(mtlDevice: MTLCreateSystemDefaultDevice()!)
 }
 
 extension ViewController: AVCaptureVideoDataOutputSampleBufferDelegate {
+  
   
   func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
     
     // Scale image to process it faster
     let maxSize = CGSize(width: 1024, height: 1024)
     let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer)!
-    faceDetector.processFaces(for: pixelBuffer) { (image) in
+    faceDetector.processFaces2(for: pixelBuffer) { (image) in
       DispatchQueue.main.async {
-        self.imageView.image = UIImage(ciImage: image!)
+        guard let image = image else { return }
+//        debugPrint(image.extent)
+//        let cgImg = self.ciContext.createCGImage(image, from: .init(origin: .zero, size: image.extent.size))
+//        let uiImage = UIImage(cgImage: cgImg!)
+        self.imageView.image = UIImage(ciImage: image.cropped(to: .init(origin: .zero, size: .init(width: 1920, height: 1080))))//.oriented(.leftMirrored))
       }
     }
 //    if let image = UIImage(sampleBuffer: sampleBuffer)?.flipped()?.imageWithAspectFit(size: maxSize) {

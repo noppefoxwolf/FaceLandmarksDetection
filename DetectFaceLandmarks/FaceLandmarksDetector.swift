@@ -14,24 +14,46 @@ let previewImageView: UIImageView = .init()
 class FaceLandmarksDetector {
   let sequenceRequestHandler = VNSequenceRequestHandler()
   
-  open func processFaces(for pixelBuffer: CVPixelBuffer, complete: @escaping (CIImage?) -> Void) {
-    let pixelBuffer = pixelBuffer
-    let detectFaceRequest = VNDetectFaceLandmarksRequest { (request, error) in
+  open func processFaces2(for pixelBuffer: CVPixelBuffer, complete: @escaping (CIImage?) -> Void) {
+    let inputImage = CIImage(cvPixelBuffer: pixelBuffer)
+    let request = VNDetectFaceLandmarksRequest { (request, error) in
       if error == nil {
         if let results = request.results as? [VNFaceObservation] {
           if let landmarks = results.first?.landmarks {
-            complete(self.process(pixelBuffer: pixelBuffer, faceLandmarks: landmarks)!)
+            //debugPrint(landmarks.nose?.pointsInImage(imageSize: inputImage.extent.size).first)
+            //左上0,0でくる
+            complete(self.process(inputImage: inputImage, faceLandmarks: landmarks))
           } else {
-            complete(CIImage(cvPixelBuffer: pixelBuffer).oriented(.leftMirrored))
+            complete(inputImage)
           }
         }
       } else {
-        complete(CIImage(cvPixelBuffer: pixelBuffer).oriented(.leftMirrored))
+        complete(inputImage)
         print(error!.localizedDescription)
       }
     }
-    let vnImage = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, options: [:])
-    try? vnImage.perform([detectFaceRequest])
+    let vnImage = VNImageRequestHandler(ciImage: inputImage, options: [:])
+    try? vnImage.perform([request])
+  }
+  
+  open func processFaces(for pixelBuffer: CVPixelBuffer, complete: @escaping (CIImage?) -> Void) {
+//    let pixelBuffer = pixelBuffer
+//    let detectFaceRequest = VNDetectFaceLandmarksRequest { (request, error) in
+//      if error == nil {
+//        if let results = request.results as? [VNFaceObservation] {
+//          if let landmarks = results.first?.landmarks {
+//            complete(self.process(image: pixelBuffer, faceLandmarks: landmarks)!)
+//          } else {
+//            complete(CIImage(cvPixelBuffer: pixelBuffer).oriented(.leftMirrored))
+//          }
+//        }
+//      } else {
+//        complete(CIImage(cvPixelBuffer: pixelBuffer).oriented(.leftMirrored))
+//        print(error!.localizedDescription)
+//      }
+//    }
+//    let vnImage = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, options: [:])
+//    try? vnImage.perform([detectFaceRequest])
   //    try? sequenceRequestHandler.perform([detectFaceRequest], on: cgImage)f
   }
   
@@ -58,14 +80,12 @@ class FaceLandmarksDetector {
     let cgImage = source.cgImage!
     let vnImage = VNImageRequestHandler(cgImage: cgImage, options: [:])
     try? vnImage.perform([detectFaceRequest])
-//    try? sequenceRequestHandler.perform([detectFaceRequest], on: cgImage)f
+//    try? sequenceRequestHandler.perform([detectFaceRequest], on: cgImage)
   }
   
-  private func process(pixelBuffer: CVPixelBuffer, faceLandmarks: VNFaceLandmarks2D) -> CIImage? {
+  private func process(inputImage: CIImage, faceLandmarks: VNFaceLandmarks2D) -> CIImage? {
     if let noseCrest = faceLandmarks.noseCrest, let faceContour = faceLandmarks.faceContour {
-      let width = CVPixelBufferGetWidth(pixelBuffer)
-      let height = CVPixelBufferGetHeight(pixelBuffer)
-      let size = CGSize(width: width, height: height)
+      let size = inputImage.extent.size
       let midBottom = faceContour.pointsInImage(imageSize: size)[faceContour.pointCount / 2]
       let center = noseCrest.pointsInImage(imageSize: size).last!
       
@@ -88,40 +108,82 @@ class FaceLandmarksDetector {
         )
       }
       
-      let extJow = externallyDivide(a: center, b: midBottom, m: 1, n: 0.5)
-      debugPrint(midBottom, extJow)
+      func getRadian(a: CGPoint, b: CGPoint) -> CGFloat {
+        return atan2(b.y - a.y, b.x - a.x)
+      }
       
-      let edgeA = rotate(a: center, p: extJow, θ: .pi / 2 * 1 - (.pi / 4))
-      let edgeB = rotate(a: center, p: extJow, θ: .pi / 2 * 2 - (.pi / 4))
-      let edgeC = rotate(a: center, p: extJow, θ: .pi / 2 * 3 - (.pi / 4))
-      let edgeD = rotate(a: center, p: extJow, θ: .pi / 2 * 4 - (.pi / 4))
+      let extJow = externallyDivide(a: center, b: midBottom, m: 1, n: 0.5)
+      
+      let edgeA = rotate(a: center, p: extJow, θ: .pi / 2 * 1 - (.pi / 4)) //左下
+      let edgeB = rotate(a: center, p: extJow, θ: .pi / 2 * 2 - (.pi / 4)) //左上
+      let edgeC = rotate(a: center, p: extJow, θ: .pi / 2 * 3 - (.pi / 4)) //右上
+      let edgeD = rotate(a: center, p: extJow, θ: .pi / 2 * 4 - (.pi / 4)) //右下
       
       // 抜き取り
-      let inputImage = CIImage(cvPixelBuffer: pixelBuffer)
       let correctionFilter = CIFilter(name: "CIPerspectiveCorrection")!
-      correctionFilter.setValue(inputImage, forKey: kCIInputImageKey)
+      correctionFilter.setValue(inputImage.clampedToExtent(), forKey: kCIInputImageKey) //ハミでてもちゃんとサイズ維持する
       correctionFilter.setValue(CIVector(x: edgeB.x, y: edgeB.y), forKey: "inputTopLeft")
-      correctionFilter.setValue(CIVector(x: edgeC.x, y: edgeC.y), forKey: "inputTopRight")
+      correctionFilter.setValue(CIVector(x: edgeA.x, y: edgeA.y), forKey: "inputTopRight")
       correctionFilter.setValue(CIVector(x: edgeD.x, y: edgeD.y), forKey: "inputBottomRight")
-      correctionFilter.setValue(CIVector(x: edgeA.x, y: edgeA.y), forKey: "inputBottomLeft")
+      correctionFilter.setValue(CIVector(x: edgeC.x, y: edgeC.y), forKey: "inputBottomLeft")
       
       // 処理
+      let sepiaInputImage = correctionFilter.outputImage!
       let sepiaFilter = CIFilter(name: "CISepiaTone")!
-      sepiaFilter.setValue(correctionFilter.outputImage!, forKey: kCIInputImageKey)
+      sepiaFilter.setValue(sepiaInputImage, forKey: kCIInputImageKey)
+    
+      //顔の傾き
+      let faceRad = getRadian(a: center, b: midBottom)
+    
+      //右目
+      let rightEyeFilter: CIFilter
+      rightEye: do {
+        let eyeDistortInput = sepiaFilter.outputImage!
+        let cropedSize = eyeDistortInput.extent
+        rightEyeFilter = CIFilter(name: "CIBumpDistortion")!
+        rightEyeFilter.setValue(eyeDistortInput, forKey: kCIInputImageKey)
+        if let pupil = faceLandmarks.rightPupil?.pointsInImage(imageSize: size).first {
+          let rotatedPupil = rotate(a: center, p: pupil, θ: -faceRad) //顔の回転を加味する
+
+          let p = CGPoint(x: rotatedPupil.x - center.x + cropedSize.width / 2,
+                          y: rotatedPupil.y - center.y + cropedSize.height / 2)
+          rightEyeFilter.setValue(CIVector(x: p.x, y: p.y), forKey: kCIInputCenterKey)
+        }
+        rightEyeFilter.setValue(50, forKey: kCIInputRadiusKey)
+        rightEyeFilter.setValue(1.2, forKey: kCIInputScaleKey)
+      }
+      
+      //左目
+      let leftEyeFilter: CIFilter
+      leftEye: do {
+        let eyeDistortInput = rightEyeFilter.outputImage!
+        let cropedSize = eyeDistortInput.extent
+        leftEyeFilter = CIFilter(name: "CIBumpDistortion")!
+        leftEyeFilter.setValue(eyeDistortInput, forKey: kCIInputImageKey)
+        if let pupil = faceLandmarks.leftPupil?.pointsInImage(imageSize: size).first {
+          let rotatedPupil = rotate(a: center, p: pupil, θ: -faceRad) //顔の回転を加味する
+
+          let p = CGPoint(x: rotatedPupil.x - center.x + cropedSize.width / 2,
+                          y: rotatedPupil.y - center.y + cropedSize.height / 2)
+          leftEyeFilter.setValue(CIVector(x: p.x, y: p.y), forKey: kCIInputCenterKey)
+        }
+        leftEyeFilter.setValue(50, forKey: kCIInputRadiusKey)
+        leftEyeFilter.setValue(1.2, forKey: kCIInputScaleKey)
+      }
       
       // 合成
       let transformFilter = CIFilter(name: "CIPerspectiveTransform")!
-      let transformInputImage = sepiaFilter.outputImage!
+      let transformInputImage = leftEyeFilter.outputImage!
       transformFilter.setValue(transformInputImage, forKey: kCIInputImageKey)
       transformFilter.setValue(CIVector(x: edgeB.x, y: edgeB.y), forKey: "inputTopLeft")
-      transformFilter.setValue(CIVector(x: edgeC.x, y: edgeC.y), forKey: "inputTopRight")
+      transformFilter.setValue(CIVector(x: edgeA.x, y: edgeA.y), forKey: "inputTopRight")
       transformFilter.setValue(CIVector(x: edgeD.x, y: edgeD.y), forKey: "inputBottomRight")
-      transformFilter.setValue(CIVector(x: edgeA.x, y: edgeA.y), forKey: "inputBottomLeft")
+      transformFilter.setValue(CIVector(x: edgeC.x, y: edgeC.y), forKey: "inputBottomLeft")
       
-      let result = transformFilter.outputImage?.composited(over: inputImage).oriented(.leftMirrored)
+      let result = transformFilter.outputImage?.composited(over: inputImage)
       return result
     }
-    return CIImage(cvPixelBuffer: pixelBuffer)
+    return inputImage
   }
   
   private func drawOnImage(source: UIImage, boundingRect: CGRect, faceLandmarks: VNFaceLandmarks2D) -> UIImage {
