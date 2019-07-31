@@ -101,7 +101,7 @@ extension ViewController: AVCaptureVideoDataOutputSampleBufferDelegate {
     faceDetector.processFaces2(for: pixelBuffer, scale: scale) { (image) in
       DispatchQueue.main.async {
         guard let image = image else { return }
-        self.imageView.image = UIImage(ciImage: image.cropped(to: .init(origin: .zero, size: .init(width: CGFloat(width) * scale, height: CGFloat(height) * scale))).oriented(.leftMirrored))
+        self.imageView.image = UIImage(ciImage: image)
       }
     }
 //    if let image = UIImage(sampleBuffer: sampleBuffer)?.flipped()?.imageWithAspectFit(size: maxSize) {

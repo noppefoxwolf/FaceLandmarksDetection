@@ -50,20 +50,21 @@ class FaceLandmarksDetector {
   let sequenceRequestHandler = VNSequenceRequestHandler()
   
   open func processFaces2(for pixelBuffer: CVPixelBuffer, scale: CGFloat, complete: @escaping (CIImage?) -> Void) {
-    let inputImage = CIImage(cvPixelBuffer: pixelBuffer).transformed(by: .init(scaleX: scale, y: scale))
+    let inputImage = CIImage(cvPixelBuffer: pixelBuffer).transformed(by: .init(scaleX: scale, y: scale)).oriented(.leftMirrored)
+    let cropRect: CGRect = .init(origin: .zero, size: inputImage.extent.size)
     let request = VNDetectFaceLandmarksRequest { (request, error) in
       if error == nil {
         if let results = request.results as? [VNFaceObservation] {
           if let landmarks = results.first?.landmarks {
             //debugPrint(landmarks.nose?.pointsInImage(imageSize: inputImage.extent.size).first)
             //左上0,0でくる
-            complete(self.process(inputImage: inputImage, faceLandmarks: landmarks))
+            complete(self.process(inputImage: inputImage, faceLandmarks: landmarks)?.cropped(to: cropRect))
           } else {
-            complete(inputImage)
+            complete(inputImage.cropped(to: cropRect))
           }
         }
       } else {
-        complete(inputImage)
+        complete(inputImage.cropped(to: cropRect))
         print(error!.localizedDescription)
       }
     }
