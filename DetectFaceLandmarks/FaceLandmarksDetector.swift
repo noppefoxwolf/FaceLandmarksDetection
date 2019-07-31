@@ -50,7 +50,7 @@ class FaceLandmarksDetector {
   let sequenceRequestHandler = VNSequenceRequestHandler()
   
   open func processFaces2(for pixelBuffer: CVPixelBuffer, scale: CGFloat, complete: @escaping (CIImage?) -> Void) {
-    let inputImage = CIImage(cvPixelBuffer: pixelBuffer).transformed(by: .init(scaleX: scale, y: scale)).oriented(.leftMirrored)
+    let inputImage = CIImage(cvPixelBuffer: pixelBuffer).transformed(by: CGAffineTransform(scaleX: scale, y: scale)).oriented(.leftMirrored)
     let cropRect: CGRect = .init(origin: .zero, size: inputImage.extent.size)
     let request = VNDetectFaceLandmarksRequest { (request, error) in
       if error == nil {
@@ -158,15 +158,15 @@ class FaceLandmarksDetector {
       // 抜き取り
       let correctionFilter = CIFilter(name: "CIPerspectiveCorrection")!
       correctionFilter.setValue(inputImage.clampedToExtent(), forKey: kCIInputImageKey) //ハミでてもちゃんとサイズ維持する
-      correctionFilter.setValue(CIVector(x: edgeB.x, y: edgeB.y), forKey: "inputTopLeft")
-      correctionFilter.setValue(CIVector(x: edgeA.x, y: edgeA.y), forKey: "inputTopRight")
-      correctionFilter.setValue(CIVector(x: edgeD.x, y: edgeD.y), forKey: "inputBottomRight")
-      correctionFilter.setValue(CIVector(x: edgeC.x, y: edgeC.y), forKey: "inputBottomLeft")
+      correctionFilter.setValue(CIVector(x: edgeC.x, y: edgeC.y), forKey: "inputTopLeft")
+      correctionFilter.setValue(CIVector(x: edgeB.x, y: edgeB.y), forKey: "inputTopRight")
+      correctionFilter.setValue(CIVector(x: edgeA.x, y: edgeA.y), forKey: "inputBottomRight")
+      correctionFilter.setValue(CIVector(x: edgeD.x, y: edgeD.y), forKey: "inputBottomLeft")
       
       // 処理 //
     
-      //顔の傾き
-      let faceRad = getRadian(a: center, b: midBottom)
+      // 顔の傾き
+      let faceRad = getRadian(a: center, b: midBottom) + CGFloat.pi / 2
     
       //右目
       let rightEyeFilter: CIFilter
@@ -247,10 +247,10 @@ class FaceLandmarksDetector {
       let transformFilter = CIFilter(name: "CIPerspectiveTransform")!
       let transformInputImage = shrinkFilter.outputImage!
       transformFilter.setValue(transformInputImage, forKey: kCIInputImageKey)
-      transformFilter.setValue(CIVector(x: edgeB.x, y: edgeB.y), forKey: "inputTopLeft")
-      transformFilter.setValue(CIVector(x: edgeA.x, y: edgeA.y), forKey: "inputTopRight")
-      transformFilter.setValue(CIVector(x: edgeD.x, y: edgeD.y), forKey: "inputBottomRight")
-      transformFilter.setValue(CIVector(x: edgeC.x, y: edgeC.y), forKey: "inputBottomLeft")
+      transformFilter.setValue(CIVector(x: edgeC.x, y: edgeC.y), forKey: "inputTopLeft")
+      transformFilter.setValue(CIVector(x: edgeB.x, y: edgeB.y), forKey: "inputTopRight")
+      transformFilter.setValue(CIVector(x: edgeA.x, y: edgeA.y), forKey: "inputBottomRight")
+      transformFilter.setValue(CIVector(x: edgeD.x, y: edgeD.y), forKey: "inputBottomLeft")
       
       let result = transformFilter.outputImage?.composited(over: inputImage)
       return result

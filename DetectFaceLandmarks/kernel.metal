@@ -32,7 +32,7 @@ extern "C" {
       float mu = (location.y - a0) / a1; //x軸上にある特徴点の場所
       float s = 10; //顔の大きさと傾きを係数にかけたい
       float g = gauss(location.x, mu, s);
-      
+      return location;
 //      if (g == 0) {
 //        return location;
 //      } else {
