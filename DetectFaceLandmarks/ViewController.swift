@@ -101,6 +101,7 @@ extension ViewController: AVCaptureVideoDataOutputSampleBufferDelegate {
     faceDetector.processFaces2(for: pixelBuffer, scale: scale) { (image) in
       DispatchQueue.main.async {
         guard let image = image else { return }
+        // leftMirrorしているのでwidthとheightが逆
         self.imageView.image = UIImage(ciImage: image)
       }
     }

@@ -15,16 +15,23 @@ extension CIWarpKernel {
     let data = try! Data(contentsOf: url)
     return try! CIWarpKernel(functionName: "warp", fromMetalLibraryData: data)
   }
+  
+  static var quadraticWarp: CIWarpKernel {
+    let url = Bundle.main.url(forResource: "default", withExtension: "metallib")!
+    let data = try! Data(contentsOf: url)
+    return try! CIWarpKernel(functionName: "quadraticWarp", fromMetalLibraryData: data)
+  }
 }
 
 class FaceShrinkFilter: CIFilter {
   private var inputImage: CIImage? = nil
   private let kernel: CIWarpKernel
-  var a0: CGFloat = 0
-  var a1: CGFloat = 0
+  var a: CGFloat = 0
+  var b: CGFloat = 0
+  var c: CGFloat = 0
   
   override init() {
-    kernel = .warp
+    kernel = .quadraticWarp
     super.init()
   }
   
@@ -34,7 +41,7 @@ class FaceShrinkFilter: CIFilter {
   
   override var outputImage: CIImage? {
     guard let inputImage = inputImage else { return nil }
-    return kernel.apply(extent: inputImage.extent, roiCallback: { _, r in r }, image: inputImage, arguments: [a0, a1])
+    return kernel.apply(extent: inputImage.extent, roiCallback: { _, r in r }, image: inputImage, arguments: [a, b, c])
   }
   
   override func setValue(_ value: Any?, forKey key: String) {
@@ -50,7 +57,7 @@ class FaceLandmarksDetector {
   let sequenceRequestHandler = VNSequenceRequestHandler()
   
   open func processFaces2(for pixelBuffer: CVPixelBuffer, scale: CGFloat, complete: @escaping (CIImage?) -> Void) {
-    let inputImage = CIImage(cvPixelBuffer: pixelBuffer).transformed(by: CGAffineTransform(scaleX: scale, y: scale)).oriented(.leftMirrored)
+    let inputImage = CIImage(cvPixelBuffer: pixelBuffer).transformed(by: .init(scaleX: scale, y: scale)).oriented(.leftMirrored)
     let cropRect: CGRect = .init(origin: .zero, size: inputImage.extent.size)
     let request = VNDetectFaceLandmarksRequest { (request, error) in
       if error == nil {
@@ -227,18 +234,29 @@ class FaceLandmarksDetector {
           return (a0: (A02*A11-A01*A12) / (A00*A11-A01*A01),
                   a1: (A00*A12-A01*A02) / (A00*A11-A01*A01))
         }
+        // 2次関数でフィッティング
+        // https://blog.goo.ne.jp/kano08/e/9354000c0311e9a7a0ab01cca34033a3
+        func fitting(p1: CIVector, p2: CIVector, p3: CIVector) -> (a: CGFloat, b: CGFloat, c: CGFloat) {
+          let a = ((p1.y - p2.y) * (p1.x - p3.x) - (p1.y - p3.y) * (p1.x - p2.x)) / ((p1.x - p2.x) * (p1.x - p3.x) * (p2.y - p3.x))
+          let b = (p1.y - p2.y) / (p1.x - p2.y) - a * (p1.x + p2.x)
+          let c = p1.y - a * p1.x * p1.x - b * p1.x
+          return (a,b,c)
+        }
+        
         let inputImage = leftEyeFilter.outputImage!
         let cropedSize = inputImage.extent.size
         let faceContour = faceLandmarks.faceContour!.pointsInImage(imageSize: size)
-        let (a0, a1) = fitting(points: faceContour[0...5].map({ (point) -> CGPoint in
+        let filter = FaceShrinkFilter()
+        let rotatedPoints = [faceContour[0], faceContour[5], faceContour[10]].map({ (point) -> CGPoint in
           let rotated = rotate(a: center, p: point, θ: -faceRad)
           let p = CGPoint(x: rotated.x - center.x + cropedSize.width / 2,
                           y: rotated.y - center.y + cropedSize.height / 2)
           return p
-        }).map({ CIVector(x: $0.x, y: $0.y) }))
-        let filter = FaceShrinkFilter()
-        filter.a0 = a0
-        filter.a1 = a1
+        }).map({ CIVector(x: $0.x, y: $0.y) })
+        let (a, b, c) = fitting(p1: rotatedPoints[0], p2: rotatedPoints[1], p3: rotatedPoints[2])
+        filter.a = a
+        filter.b = b
+        filter.c = c
         filter.setValue(inputImage, forKey: kCIInputImageKey)
         shrinkFilter = filter
       }
