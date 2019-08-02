@@ -155,7 +155,7 @@ class FaceLandmarksDetector {
         return atan2(b.y - a.y, b.x - a.x)
       }
       
-      let extJow = externallyDivide(a: center, b: midBottom, m: 1, n: 0.5)
+      let extJow = externallyDivide(a: center, b: midBottom, m: 1, n: 0.6)
       
       let edgeA = rotate(a: center, p: extJow, θ: .pi / 2 * 1 - (.pi / 4)) //左下
       let edgeB = rotate(a: center, p: extJow, θ: .pi / 2 * 2 - (.pi / 4)) //左上
@@ -247,7 +247,7 @@ class FaceLandmarksDetector {
         let cropedSize = inputImage.extent.size
         let faceContour = faceLandmarks.faceContour!.pointsInImage(imageSize: size)
         let filter = FaceShrinkFilter()
-        let rotatedPoints = [faceContour[0], faceContour[5], faceContour[10]].map({ (point) -> CGPoint in
+        let rotatedPoints = [faceContour[1], faceContour[5], faceContour[9]].map({ (point) -> CGPoint in
           let rotated = rotate(a: center, p: point, θ: -faceRad)
           let p = CGPoint(x: rotated.x - center.x + cropedSize.width / 2,
                           y: rotated.y - center.y + cropedSize.height / 2)

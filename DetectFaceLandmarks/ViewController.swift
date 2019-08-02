@@ -102,16 +102,16 @@ extension ViewController: AVCaptureVideoDataOutputSampleBufferDelegate {
       DispatchQueue.main.async {
         guard let image = image else { return }
         // leftMirrorしているのでwidthとheightが逆
-        self.imageView.image = UIImage(ciImage: image)
+//        self.imageView.image = UIImage(ciImage: image)
       }
     }
-//    if let image = UIImage(sampleBuffer: sampleBuffer)?.flipped()?.imageWithAspectFit(size: maxSize) {
-//      faceDetector.highlightFaces(for: image) { (resultImage) in
-//        DispatchQueue.main.async {
-//          self.imageView?.image = resultImage
-//        }
-//      }
-//    }
+    if let image = UIImage(sampleBuffer: sampleBuffer)?.flipped()?.imageWithAspectFit(size: .init(width: 1024, height: 1024)) {
+      faceDetector.highlightFaces(for: image) { (resultImage) in
+        DispatchQueue.main.async {
+          self.imageView?.image = resultImage
+        }
+      }
+    }
   }
 }
 
