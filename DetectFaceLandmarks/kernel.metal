@@ -45,17 +45,38 @@ extern "C" {
       return (-b + sqrt( pow(b, 2) - (4 * a * (c - y)) )) / (2 * a);
     }
     
-    float2 quadraticWarp(float a, float b, float c, destination dest) {
+    float quadratic_m(float y, float a, float b, float c) { // -> x
+      return (-b - sqrt( pow(b, 2) - (4 * a * (c - y)) )) / (2 * a);
+    }
+    
+    float2 quadraticWarp(float a, float b, float c, float w, float h, destination dest) {
       float2 location = dest.coord(); //現在の場所
-      float mu = quadratic(location.y, a, b, c); //x軸上にある特徴点の場所
-      float s = 1; //顔の大きさと傾きを係数にかけたい
-      float g = gauss(location.x, mu, s);
-      if (g == 0) {
-        return float2(0, 0);
-      } else {
-        return float2(location.x, location.y);
-      }
-      
+      float gy = gauss(location.y, h / 2, h / 6);
+      return float2(location.x + (10 * gy), location.y);
+//
+//      // 右
+//      float mu = quadratic(location.y, a, b, c); //x軸上にある特徴点の場所
+//      float s = w / 100; //顔の大きさと傾きを係数にかけたい
+//      float g = gauss(location.x, mu, s);
+//      float gy = gauss(location.y, h / 2, h / 2);
+//      if (g == 0) {
+//        return location;//float2(0,0);
+//        // 左
+//        float mu2 = quadratic_m(location.y, a, b, c); //x軸上にある特徴点の場所
+//        float s2 = 25; //顔の大きさと傾きを係数にかけたい
+//        float g2 = gauss(location.x, mu2 + s2, s2);
+//        if (g2 == 0) {
+//          return location;//float2(0,0);
+//        } else {
+//          if (mu2 < location.x) {
+//            return location;//float2(0,0);
+//          } else {
+//            return float2(location.x - ((1 - g2) * s2), location.y);
+//          }
+//        }
+//      } else {
+//        return float2(location.x + (10 * gy), location.y);
+//      }
     }
     // 右
     // 正面向いてないので注意

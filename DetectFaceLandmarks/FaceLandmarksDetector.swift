@@ -41,7 +41,7 @@ class FaceShrinkFilter: CIFilter {
   
   override var outputImage: CIImage? {
     guard let inputImage = inputImage else { return nil }
-    return kernel.apply(extent: inputImage.extent, roiCallback: { _, r in r }, image: inputImage, arguments: [a, b, c])
+    return kernel.apply(extent: inputImage.extent, roiCallback: { _, r in r }, image: inputImage, arguments: [a, b, c, inputImage.extent.width, inputImage.extent.height])
   }
   
   override func setValue(_ value: Any?, forKey key: String) {
@@ -237,8 +237,8 @@ class FaceLandmarksDetector {
         // 2次関数でフィッティング
         // https://blog.goo.ne.jp/kano08/e/9354000c0311e9a7a0ab01cca34033a3
         func fitting(p1: CIVector, p2: CIVector, p3: CIVector) -> (a: CGFloat, b: CGFloat, c: CGFloat) {
-          let a = ((p1.y - p2.y) * (p1.x - p3.x) - (p1.y - p3.y) * (p1.x - p2.x)) / ((p1.x - p2.x) * (p1.x - p3.x) * (p2.y - p3.x))
-          let b = (p1.y - p2.y) / (p1.x - p2.y) - a * (p1.x + p2.x)
+          let a = ((p1.y - p2.y) * (p1.x - p3.x) - (p1.y - p3.y) * (p1.x - p2.x)) / ((p1.x - p2.x) * (p1.x - p3.x) * (p2.x - p3.x))
+          let b = (p1.y - p2.y) / (p1.x - p2.x) - a * (p1.x + p2.x)
           let c = p1.y - a * p1.x * p1.x - b * p1.x
           return (a,b,c)
         }
